@@ -1,16 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Send, Shield, Zap, RefreshCw, AlertTriangle, Key } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Send, Shield, Zap, RefreshCw, AlertTriangle, Key, TrendingDown } from 'lucide-react';
 
-const mockData = [
-  { time: '10:00', originalCost: 0.12, routingCost: 0.03, saved: 0.09 },
-  { time: '11:00', originalCost: 0.45, routingCost: 0.15, saved: 0.30 },
-  { time: '12:00', originalCost: 0.30, routingCost: 0.05, saved: 0.25 },
-  { time: '13:00', originalCost: 0.80, routingCost: 0.20, saved: 0.60 },
-  { time: '14:00', originalCost: 0.50, routingCost: 0.10, saved: 0.40 },
-];
+type CostEntry = { time: string; originalCost: number; proxyCost: number; saved: number; model: string };
 
 export default function Dashboard() {
   const [openaiKey, setOpenaiKey] = useState('');
@@ -21,6 +15,28 @@ export default function Dashboard() {
   const [prompt, setPrompt] = useState('');
   const [chatLog, setChatLog] = useState<{ role: string, content: string, meta?: any }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // 실시간 비용 추적
+  const [costHistory, setCostHistory] = useState<CostEntry[]>([]);
+
+  const addCostEntry = (meta: any) => {
+    if (!meta || meta.isError) return;
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+    const saved = meta.estimated_cost_saved || 0;
+    const originalCost = saved + 0.03; // 프록시 없이 최상위 모델을 쓴 예상 비용
+    const proxyCost = meta.cache_hit ? 0 : 0.03 - saved * 0.5;
+    setCostHistory(prev => [...prev, {
+      time: timeStr,
+      originalCost: Math.round(originalCost * 100) / 100,
+      proxyCost: Math.round(Math.max(proxyCost, 0.001) * 100) / 100,
+      saved: Math.round(saved * 100) / 100,
+      model: meta.routed_to || 'unknown'
+    }]);
+  };
+
+  const totalSaved = costHistory.reduce((sum, e) => sum + e.saved, 0);
+  const totalCalls = costHistory.length;
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +117,8 @@ export default function Dashboard() {
           }
         }
       }
+      // 스트리밍 완료 후 비용 데이터를 차트에 반영
+      if (metaData) addCostEntry(metaData);
     } catch (err: any) {
       setChatLog(prev => [...prev, {
         role: 'assistant',
@@ -175,28 +193,56 @@ export default function Dashboard() {
           </section>
 
           <section className="lg:col-span-2 bg-white rounded-2xl p-8 border border-slate-200 shadow-sm flex flex-col">
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold flex items-center text-slate-900">
                 <span className="relative flex h-3 w-3 mr-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                 </span>
-                Real-time API Cost Comparison
+                Live API Cost Tracking
               </h2>
+              <div className="flex gap-3">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase">Total Saved</p>
+                  <p className="text-lg font-extrabold text-emerald-700">${totalSaved.toFixed(2)}</p>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-center">
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase">API Calls</p>
+                  <p className="text-lg font-extrabold text-indigo-700">{totalCalls}</p>
+                </div>
+              </div>
             </div>
             <div className="flex-1 w-full min-h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mockData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis dataKey="time" stroke="#64748b" axisLine={false} tickLine={false} dy={10} fontSize={12} />
-                  <YAxis stroke="#64748b" tickFormatter={(value) => `$${value}`} axisLine={false} tickLine={false} dx={-10} fontSize={12} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', color: '#0f172a', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '13px', fontWeight: '500' }} 
-                  />
-                  <Line type="monotone" dataKey="originalCost" name="Cost Without Proxy" stroke="#ef4444" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} activeDot={{r: 6}} />
-                  <Line type="monotone" dataKey="routingCost" name="Cost With Proxy" stroke="#10b981" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} activeDot={{r: 6}} />
-                </LineChart>
-              </ResponsiveContainer>
+              {costHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
+                  <TrendingDown className="w-12 h-12 text-slate-300" />
+                  <p className="text-sm font-bold text-slate-500">No data yet</p>
+                  <p className="text-xs text-slate-400 max-w-xs text-center">Go to Playground and send some prompts. Cost data will appear here in real-time.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={costHistory}>
+                    <defs>
+                      <linearGradient id="colorOriginal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorProxy" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="time" stroke="#64748b" axisLine={false} tickLine={false} dy={10} fontSize={11} />
+                    <YAxis stroke="#64748b" tickFormatter={(v) => `$${v}`} axisLine={false} tickLine={false} dx={-10} fontSize={11} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 12px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: '600' }} 
+                    />
+                    <Area type="monotone" dataKey="originalCost" name="Without Proxy" stroke="#ef4444" strokeWidth={2.5} fill="url(#colorOriginal)" dot={{r: 3}} />
+                    <Area type="monotone" dataKey="proxyCost" name="With Proxy" stroke="#10b981" strokeWidth={2.5} fill="url(#colorProxy)" dot={{r: 3}} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </section>
         </div>
