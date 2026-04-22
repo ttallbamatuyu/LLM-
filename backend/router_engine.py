@@ -50,8 +50,8 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
         cost_saved = 0.10
         if gemini_key:
             try:
-                gen = get_gemini_generator("gemini-2.0-flash")
-                return gen, cost_saved, "gemini-2.0-flash", is_masked
+                gen = get_gemini_generator("gemini-2.5-flash-preview-04-17")
+                return gen, cost_saved, "gemini-2.5-flash", is_masked
             except Exception as e:
                 print(f"[Fallback] Gemini Flash 연결 실패 ({e}). GPT-4o-mini로 즉각 우회합니다.")
                 if openai_key:
@@ -69,14 +69,14 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
                 gen = get_openai_generator("gpt-4o")
                 return gen, cost_saved, "gpt-4o", is_masked
             except Exception as e:
-                print(f"[Fallback] GPT-4o 연결 실패 ({e}). Gemini 3.1 Pro로 즉각 우회합니다.")
+                print(f"[Fallback] GPT-4o 연결 실패 ({e}). Gemini 2.5 Pro로 즉각 우회합니다.")
                 if gemini_key:
-                    gen = get_gemini_generator("gemini-2.0-pro-exp-02-05")
-                    return gen, 0.03, "gemini-2.0-pro-exp-02-05", is_masked
+                    gen = get_gemini_generator("gemini-2.5-pro-preview-05-06")
+                    return gen, 0.03, "gemini-2.5-pro", is_masked
                 else: raise Exception(f"MEDIUM 라우팅 실패 - OpenAI 원본 에러: [{e}] (우회할 Gemini 키도 없음)")
         elif gemini_key:
-            gen = get_gemini_generator("gemini-2.0-pro-exp-02-05")
-            return gen, 0.03, "gemini-2.0-pro-exp-02-05", is_masked
+            gen = get_gemini_generator("gemini-2.5-pro-preview-05-06")
+            return gen, 0.03, "gemini-2.5-pro", is_masked
 
     else:
         cost_saved = 0.0
@@ -85,13 +85,13 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
                 gen = get_openai_generator("o1-preview")
                 return gen, cost_saved, "o1-preview", is_masked
             except Exception as e:
-                print(f"[Fallback] o1-preview 연결 실패 ({e}). Gemini 3.1 Ultra로 즉각 우회합니다.")
+                print(f"[Fallback] o1-preview 연결 실패 ({e}). Gemini 2.5 Pro로 즉각 우회합니다.")
                 if gemini_key:
-                    gen = get_gemini_generator("gemini-2.0-pro-exp-02-05")
-                    return gen, 0.0, "gemini-2.0-pro-exp-02-05", is_masked
+                    gen = get_gemini_generator("gemini-2.5-pro-preview-05-06")
+                    return gen, 0.0, "gemini-2.5-pro", is_masked
                 else: raise Exception(f"HARD 라우팅 실패 - OpenAI 원본 에러: [{e}] (우회할 Gemini 키도 없음)")
         elif gemini_key:
-            gen = get_gemini_generator("gemini-2.0-pro-exp-02-05")
-            return gen, 0.0, "gemini-2.0-pro-exp-02-05", is_masked
+            gen = get_gemini_generator("gemini-2.5-pro-preview-05-06")
+            return gen, 0.0, "gemini-2.5-pro", is_masked
 
     raise ValueError("API 키가 누락되었습니다.")
