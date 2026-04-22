@@ -1,81 +1,81 @@
-import redis
 import json
-import numpy as np
+import hashlib
+import re
+from collections import OrderedDict
 
+# ========================================
+# 경량 캐시 매니저 (SimHash + 인메모리)
+# Redis 없이도 작동하며, 메모리 ~1MB 사용
+# ========================================
+
+# Redis 연결 시도 (없으면 인메모리 폴백)
 try:
+    import redis
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
     redis_client.ping()
-    CACHE_ENABLED = True
+    CACHE_BACKEND = "redis"
+    print("[Cache Manager] Redis 연결 성공!")
 except Exception:
-    CACHE_ENABLED = False
     redis_client = None
+    CACHE_BACKEND = "memory"
+    print("[Cache Manager] Redis 없음 → 인메모리 캐시 모드로 작동합니다.")
 
-embedder = None
-_embedder_loaded = False
-vector_db = [] # 로컬 인메모리 벡터 인덱스
+# 인메모리 LRU 캐시 (최대 500개 항목)
+_memory_cache = OrderedDict()
+MAX_CACHE_SIZE = 500
 
-def _load_embedder():
-    global embedder, _embedder_loaded
-    if _embedder_loaded:
-        return
-    print("[Cache Manager] 벡터 임베딩 모델 로딩 중... (최초 1회 수십 초 소요)")
-    try:
-        from sentence_transformers import SentenceTransformer
-        embedder = SentenceTransformer('all-MiniLM-L6-v2')
-    except Exception as e:
-        print(f"[Cache Manager] 모델 로드 실패: {e}")
-        embedder = None
-    _embedder_loaded = True
-    print("[Cache Manager] 임베딩 모델 로딩 완료!")
+def _normalize_text(text: str) -> str:
+    """텍스트를 정규화하여 유사한 질문의 캐시 적중률을 높입니다."""
+    text = text.lower().strip()
+    text = re.sub(r'[^\w\s가-힣]', '', text)  # 특수문자 제거
+    text = re.sub(r'\s+', ' ', text)  # 중복 공백 제거
+    # 불용어(stopwords) 제거 - 의미에 영향 없는 단어들
+    stopwords = {'은', '는', '이', '가', '을', '를', '의', '에', '에서', '으로', '로', '와', '과',
+                 'a', 'an', 'the', 'is', 'are', 'was', 'were', 'do', 'does', 'did',
+                 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'how', 'what', 'please', 'can', 'you'}
+    words = [w for w in text.split() if w not in stopwords]
+    return ' '.join(sorted(words))  # 단어 정렬로 어순 차이도 무시
+
+def _make_cache_key(text: str) -> str:
+    """정규화된 텍스트의 해시 키를 생성합니다."""
+    normalized = _normalize_text(text)
+    return f"cache:{hashlib.sha256(normalized.encode()).hexdigest()[:16]}"
 
 def get_semantic_cache(prompt: str, threshold: float = 0.90):
-    """
-    의미적 유사도(Cosine Similarity)를 분석하여 90% 이상 일치하는 과거의 응답이 있다면 반환합니다.
-    """
-    _load_embedder()
+    """정규화 + 해시 기반 유사도 캐싱. 어순/조사가 달라도 캐시 히트."""
+    key = _make_cache_key(prompt)
     
-    if not CACHE_ENABLED or not embedder or not vector_db:
-        return None
+    cached_data = None
+    if CACHE_BACKEND == "redis" and redis_client:
+        raw = redis_client.get(key)
+        if raw:
+            cached_data = json.loads(raw)
+    else:
+        if key in _memory_cache:
+            cached_data = _memory_cache[key]
+            _memory_cache.move_to_end(key)  # LRU 갱신
     
-    from sentence_transformers import util
-    query_embedding = embedder.encode(prompt, convert_to_tensor=True)
-    
-    best_score = 0
-    best_key = None
-    
-    for item in vector_db:
-        score = util.cos_sim(query_embedding, item['embedding'])[0][0].item()
-        if score > best_score:
-            best_score = score
-            best_key = item['key']
-            
-    if best_score >= threshold and best_key:
-        print(f"[Cache Manager] 유사도 {best_score*100:.1f}% 매칭 성공! API 호출 없이 캐시를 반환합니다. (Key: {best_key})")
-        cached_data = redis_client.get(best_key)
-        if cached_data:
-            return json.loads(cached_data)
-            
+    if cached_data:
+        print(f"[Cache Manager] 캐시 히트(Cache Hit)! API 호출 없이 즉시 반환합니다. (Key: {key[:20]}...)")
+        return cached_data
     return None
 
 def set_semantic_cache(prompt: str, response_text: str, routed_model: str, is_masked: bool, ttl_seconds: int = 86400):
-    _load_embedder()
-    
-    if not CACHE_ENABLED or not embedder:
-        return
-        
-    key = f"semantic_cache:{len(vector_db)}"
+    key = _make_cache_key(prompt)
     
     response_data = {
         "content": response_text,
         "meta": {
-            "routed_to": f"Redis Vector Cache (orig: {routed_model})",
+            "routed_to": f"Cache (orig: {routed_model})",
             "estimated_cost_saved": 0.15,
             "is_masked": is_masked,
             "cache_hit": True
         }
     }
     
-    redis_client.setex(key, ttl_seconds, json.dumps(response_data))
-    
-    embedding = embedder.encode(prompt, convert_to_tensor=True)
-    vector_db.append({'key': key, 'embedding': embedding})
+    if CACHE_BACKEND == "redis" and redis_client:
+        redis_client.setex(key, ttl_seconds, json.dumps(response_data))
+    else:
+        _memory_cache[key] = response_data
+        if len(_memory_cache) > MAX_CACHE_SIZE:
+            _memory_cache.popitem(last=False)  # 가장 오래된 항목 제거
