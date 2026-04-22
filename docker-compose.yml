@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:alpine
+    container_name: proxy_redis_cache
+    ports:
+      - "6379:6379"
+    restart: always
+  
+  # 추후 상용화 데이터를 위한 PostgreSQL을 도커로 함께 올릴 수 있도록 뼈대만 잡아둡니다.
+  # postgres:
+  #   image: postgres:15
+  #   ...
