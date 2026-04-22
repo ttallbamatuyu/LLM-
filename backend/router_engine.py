@@ -29,35 +29,49 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
                 yield chunk.choices[0].delta.get("content", "")
         return gen()
 
-    def get_gemini_generator(model_name):
+    # Gemini 모델 우선순위 (최신 → 안정 순서로 자동 시도)
+    GEMINI_FLASH_MODELS = ["gemini-2.5-flash-preview-04-17", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]
+    GEMINI_PRO_MODELS = ["gemini-2.5-pro-preview-05-06", "gemini-2.0-pro", "gemini-1.5-pro"]
+
+    def get_gemini_generator(model_list):
+        """모델 리스트를 순서대로 시도하여 첫 번째 성공하는 모델로 스트리밍합니다."""
         client = genai.Client(api_key=gemini_key)
-        response = client.models.generate_content_stream(
-            model=model_name, 
-            contents=combined_prompt
-        )
-        iterator = iter(response)
-        first_chunk = next(iterator)
-        def gen():
-            if first_chunk.text:
-                yield first_chunk.text
-            for chunk in iterator:
-                if chunk.text:
-                    yield chunk.text
-        return gen()
+        last_error = None
+        for model_name in model_list:
+            try:
+                response = client.models.generate_content_stream(
+                    model=model_name, 
+                    contents=combined_prompt
+                )
+                iterator = iter(response)
+                first_chunk = next(iterator)
+                def gen(fc=first_chunk, it=iterator):
+                    if fc.text:
+                        yield fc.text
+                    for chunk in it:
+                        if chunk.text:
+                            yield chunk.text
+                print(f"[Gemini] {model_name} 연결 성공!")
+                return gen(), model_name
+            except Exception as e:
+                print(f"[Gemini] {model_name} 실패 → 다음 모델 시도... ({e})")
+                last_error = e
+                continue
+        raise Exception(f"Gemini 모든 모델 실패. 마지막 에러: {last_error}")
 
     # 3. 우아한 Fallback 라우팅 및 제너레이터 리턴
     if complexity == 'EASY':
         cost_saved = 0.10
         if gemini_key:
             try:
-                gen = get_gemini_generator("gemini-1.5-flash")
-                return gen, cost_saved, "gemini-1.5-flash", is_masked
+                gen, model_used = get_gemini_generator(GEMINI_FLASH_MODELS)
+                return gen, cost_saved, model_used, is_masked
             except Exception as e:
-                print(f"[Fallback] Gemini Flash 연결 실패 ({e}). GPT-4o-mini로 즉각 우회합니다.")
+                print(f"[Fallback] Gemini 전체 실패. GPT-4o-mini로 우회합니다.")
                 if openai_key:
                     gen = get_openai_generator("gpt-4o-mini")
                     return gen, 0.08, "gpt-4o-mini", is_masked
-                else: raise Exception(f"EASY 라우팅 실패 - Gemini 원본 에러: [{e}] (우회할 OpenAI 키도 없음)")
+                else: raise Exception(f"EASY 라우팅 실패 - Gemini: [{e}] (OpenAI 키 없음)")
         elif openai_key:
             gen = get_openai_generator("gpt-4o-mini")
             return gen, 0.08, "gpt-4o-mini", is_masked
@@ -69,14 +83,13 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
                 gen = get_openai_generator("gpt-4o")
                 return gen, cost_saved, "gpt-4o", is_masked
             except Exception as e:
-                print(f"[Fallback] GPT-4o 연결 실패 ({e}). Gemini Pro로 즉각 우회합니다.")
                 if gemini_key:
-                    gen = get_gemini_generator("gemini-1.5-pro")
-                    return gen, 0.03, "gemini-1.5-pro", is_masked
-                else: raise Exception(f"MEDIUM 라우팅 실패 - OpenAI 원본 에러: [{e}] (우회할 Gemini 키도 없음)")
+                    gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
+                    return gen, 0.03, model_used, is_masked
+                else: raise Exception(f"MEDIUM 라우팅 실패 - OpenAI: [{e}] (Gemini 키 없음)")
         elif gemini_key:
-            gen = get_gemini_generator("gemini-1.5-pro")
-            return gen, 0.03, "gemini-1.5-pro", is_masked
+            gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
+            return gen, 0.03, model_used, is_masked
 
     else:
         cost_saved = 0.0
@@ -85,13 +98,12 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
                 gen = get_openai_generator("o1-preview")
                 return gen, cost_saved, "o1-preview", is_masked
             except Exception as e:
-                print(f"[Fallback] o1-preview 연결 실패 ({e}). Gemini Pro로 즉각 우회합니다.")
                 if gemini_key:
-                    gen = get_gemini_generator("gemini-1.5-pro")
-                    return gen, 0.0, "gemini-1.5-pro", is_masked
-                else: raise Exception(f"HARD 라우팅 실패 - OpenAI 원본 에러: [{e}] (우회할 Gemini 키도 없음)")
+                    gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
+                    return gen, 0.0, model_used, is_masked
+                else: raise Exception(f"HARD 라우팅 실패 - OpenAI: [{e}] (Gemini 키 없음)")
         elif gemini_key:
-            gen = get_gemini_generator("gemini-1.5-pro")
-            return gen, 0.0, "gemini-1.5-pro", is_masked
+            gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
+            return gen, 0.0, model_used, is_masked
 
     raise ValueError("API 키가 누락되었습니다.")
