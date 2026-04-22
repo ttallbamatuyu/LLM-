@@ -1,7 +1,6 @@
 import redis
 import json
 import numpy as np
-from sentence_transformers import SentenceTransformer, util
 
 try:
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -9,25 +8,36 @@ try:
     CACHE_ENABLED = True
 except Exception:
     CACHE_ENABLED = False
+    redis_client = None
 
-print("[Cache Manager] 벡터 임베딩 모델 로딩 중... (최초 1회 수십 초 소요)")
-try:
-    embedder = SentenceTransformer('all-MiniLM-L6-v2')
-except Exception as e:
-    print(f"[Cache Manager] 모델 로드 실패: {e}")
-    embedder = None
-print("[Cache Manager] 임베딩 모델 로딩 완료!")
-
+embedder = None
+_embedder_loaded = False
 vector_db = [] # 로컬 인메모리 벡터 인덱스
+
+def _load_embedder():
+    global embedder, _embedder_loaded
+    if _embedder_loaded:
+        return
+    print("[Cache Manager] 벡터 임베딩 모델 로딩 중... (최초 1회 수십 초 소요)")
+    try:
+        from sentence_transformers import SentenceTransformer
+        embedder = SentenceTransformer('all-MiniLM-L6-v2')
+    except Exception as e:
+        print(f"[Cache Manager] 모델 로드 실패: {e}")
+        embedder = None
+    _embedder_loaded = True
+    print("[Cache Manager] 임베딩 모델 로딩 완료!")
 
 def get_semantic_cache(prompt: str, threshold: float = 0.90):
     """
     의미적 유사도(Cosine Similarity)를 분석하여 90% 이상 일치하는 과거의 응답이 있다면 반환합니다.
-    글자가 조금 달라도 의미가 같으면 캐시 히트(Cache Hit)가 발생하여 비용을 100% 절감합니다.
     """
+    _load_embedder()
+    
     if not CACHE_ENABLED or not embedder or not vector_db:
         return None
-        
+    
+    from sentence_transformers import util
     query_embedding = embedder.encode(prompt, convert_to_tensor=True)
     
     best_score = 0
@@ -48,6 +58,8 @@ def get_semantic_cache(prompt: str, threshold: float = 0.90):
     return None
 
 def set_semantic_cache(prompt: str, response_text: str, routed_model: str, is_masked: bool, ttl_seconds: int = 86400):
+    _load_embedder()
+    
     if not CACHE_ENABLED or not embedder:
         return
         

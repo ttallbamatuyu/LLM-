@@ -1,13 +1,44 @@
 version: '3.8'
+
 services:
   redis:
-    image: redis:alpine
-    container_name: proxy_redis_cache
+    image: redis:7-alpine
+    container_name: llm_proxy_redis
     ports:
       - "6379:6379"
-    restart: always
-  
-  # 추후 상용화 데이터를 위한 PostgreSQL을 도커로 함께 올릴 수 있도록 뼈대만 잡아둡니다.
-  # postgres:
-  #   image: postgres:15
-  #   ...
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build: ./backend
+    container_name: llm_proxy_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: llm_proxy_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  redis_data:

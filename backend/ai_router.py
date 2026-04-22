@@ -1,17 +1,26 @@
 from transformers import pipeline
 import time
 
-print("[AI Router] Zero-Shot 분류 AI 로딩 중... (최초 1회 수 초 소요)")
-try:
-    # 모바일 환경에서도 돌아가는 초경량 DistilBART 모델로 질문의 맥락을 스스로 이해합니다.
-    classifier = pipeline("zero-shot-classification", model="valhalla/distilbart-mnli-12-1")
-except Exception as e:
-    print(f"[AI Router] AI 모델 로드 실패. 기존 규칙 기반 엔진으로 롤백합니다: {e}")
-    classifier = None
-print("[AI Router] AI 로딩 완료!")
+classifier = None
+_loaded = False
+
+def _load_model():
+    global classifier, _loaded
+    if _loaded:
+        return
+    print("[AI Router] Zero-Shot 분류 AI 로딩 중... (최초 1회 수 초 소요)")
+    try:
+        classifier = pipeline("zero-shot-classification", model="valhalla/distilbart-mnli-12-1")
+    except Exception as e:
+        print(f"[AI Router] AI 모델 로드 실패. 기존 규칙 기반 엔진으로 롤백합니다: {e}")
+        classifier = None
+    _loaded = True
+    print("[AI Router] AI 로딩 완료!")
 
 def analyze_complexity_ai(prompt: str) -> str:
     """단순 키워드 매칭을 벗어나, 문맥 자체를 이해하는 AI 라우터 엔진"""
+    _load_model()
+    
     if not classifier:
         if len(prompt) > 200: return 'HARD'
         return 'EASY'

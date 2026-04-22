@@ -3,5 +3,12 @@ uvicorn
 sqlalchemy
 pydantic
 openai
-google-generativeai
+google-genai
 python-dotenv
+redis
+sentence-transformers
+transformers
+torch
+presidio-analyzer
+presidio-anonymizer
+spacy
