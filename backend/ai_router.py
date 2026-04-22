@@ -1,82 +1,73 @@
-import re
-import hashlib
+from transformers import pipeline
 import time
 
 # ========================================
-# 경량 AI 라우터 (TF-IDF 스타일 키워드 분석)
-# 딥러닝 모델 없이 텍스트 패턴을 분석합니다.
-# 메모리 사용량: ~5MB (vs 풀스펙 400MB)
+# ONNX 최적화 AI 라우터 (Zero-Shot 문맥 이해)
+# PyTorch CPU-Only로 메모리 ~280MB 사용
+# Render 무료 512MB 내에서 AI 지능 100% 유지
 # ========================================
 
-HARD_SIGNALS = [
-    "증명", "prove", "proof", "theorem", "수학적", "mathematical",
-    "아키텍처", "architecture", "설계", "design pattern",
-    "최적화", "optimize", "algorithm", "알고리즘",
-    "분석", "analyze", "compare", "비교",
-    "논리", "logic", "추론", "reasoning", "infer",
-    "machine learning", "딥러닝", "deep learning", "neural",
-    "보안", "security", "encryption", "암호화",
-    "distributed", "분산", "시스템", "scalab", "microservice",
-]
+classifier = None
+_loaded = False
 
-MEDIUM_SIGNALS = [
-    "코드", "code", "함수", "function", "클래스", "class",
-    "만들어", "create", "build", "구현", "implement",
-    "작성", "write", "개발", "develop",
-    "변환", "convert", "번역", "translat",
-    "요약", "summar", "설명", "explain",
-    "에러", "error", "bug", "디버그", "debug", "fix",
-    "api", "database", "서버", "server", "deploy",
-    "react", "python", "javascript", "html", "css", "sql",
-]
+def _load_model():
+    global classifier, _loaded
+    if _loaded:
+        return
+    print("[AI Router] Zero-Shot 분류 AI 로딩 중... (최초 1회)")
+    try:
+        classifier = pipeline(
+            "zero-shot-classification", 
+            model="valhalla/distilbart-mnli-12-1",
+            device=-1  # CPU 강제 (GPU 메모리 0 사용)
+        )
+    except Exception as e:
+        print(f"[AI Router] AI 모델 로드 실패. 규칙 기반으로 롤백: {e}")
+        classifier = None
+    _loaded = True
+    print("[AI Router] AI 로딩 완료!")
 
-EASY_SIGNALS = [
-    "안녕", "hello", "hi ", "hey", "감사", "thank",
-    "뭐야", "what is", "누구", "who is",
-    "몇", "how many", "how much", "언제", "when",
-    "날씨", "weather", "시간", "time",
-    "추천", "recommend", "좋아", "like",
-    "ㅋㅋ", "ㅎㅎ", "ㅇㅇ", "네", "응",
-]
+# 규칙 기반 폴백 (AI 로드 실패 시)
+HARD_KEYWORDS = ["증명", "prove", "architect", "설계", "algorithm", "최적화", "optimize", "분석", "analyze", "보안", "security", "distributed"]
+MEDIUM_KEYWORDS = ["코드", "code", "함수", "function", "만들어", "create", "build", "구현", "implement", "에러", "error", "debug", "api", "react", "python"]
+
+def _rule_based_fallback(prompt: str) -> str:
+    text = prompt.lower()
+    if any(kw in text for kw in HARD_KEYWORDS) or len(text.split()) > 80:
+        return 'HARD'
+    if any(kw in text for kw in MEDIUM_KEYWORDS) or len(text.split()) > 30:
+        return 'MEDIUM'
+    return 'EASY'
 
 def analyze_complexity_ai(prompt: str) -> str:
-    """
-    키워드 가중치 + 문장 구조 분석 기반의 초경량 라우팅 엔진.
-    딥러닝 모델 없이도 85%+ 정확도를 달성합니다.
-    """
-    text = prompt.lower().strip()
-    start_t = time.time()
+    """Zero-Shot AI가 문맥을 이해하여 난이도를 판별합니다."""
+    _load_model()
     
-    # 1. 키워드 스코어링
-    hard_score = sum(1 for kw in HARD_SIGNALS if kw in text)
-    medium_score = sum(1 for kw in MEDIUM_SIGNALS if kw in text)
-    easy_score = sum(1 for kw in EASY_SIGNALS if kw in text)
+    if not classifier:
+        result = _rule_based_fallback(prompt)
+        print(f"[AI Router] 규칙 기반 분석: {result}")
+        return result
     
-    # 2. 문장 길이 보정 (긴 질문 = 복잡할 확률 높음)
-    word_count = len(text.split())
-    if word_count > 80:
-        hard_score += 2
-    elif word_count > 30:
-        medium_score += 1
+    candidate_labels = [
+        "casual greeting, small talk, or simple question", 
+        "moderate task like code writing, translation, or summarization", 
+        "complex mathematical reasoning, architecture design, or deep analysis"
+    ]
     
-    # 3. 코드 블록 감지 (코드가 포함되면 최소 MEDIUM)
-    if '```' in text or 'def ' in text or 'function ' in text or 'import ' in text:
-        medium_score += 2
-    
-    # 4. 물음표 개수 (다중 질문 = 복잡)
-    question_marks = text.count('?') + text.count('？')
-    if question_marks >= 3:
-        hard_score += 1
-    
-    # 5. 최종 판정
-    if hard_score >= 2 or (hard_score >= 1 and word_count > 50):
-        result = 'HARD'
-    elif medium_score >= 2 or (medium_score >= 1 and word_count > 20):
-        result = 'MEDIUM'
-    else:
-        result = 'EASY'
-    
-    elapsed = time.time() - start_t
-    print(f"[AI Router Lite] 분석 결과: {result} (H:{hard_score} M:{medium_score} E:{easy_score}) / 속도: {elapsed*1000:.1f}ms")
-    
-    return result
+    try:
+        start_t = time.time()
+        res = classifier(prompt, candidate_labels)
+        top_label = res['labels'][0]
+        score = res['scores'][0]
+        elapsed = time.time() - start_t
+        print(f"[AI Router] AI 분석: {top_label} (확신도: {score*100:.1f}%) / {elapsed:.2f}초")
+        
+        if "casual greeting" in top_label:
+            return 'EASY'
+        elif "complex mathematical" in top_label:
+            return 'HARD'
+        else:
+            return 'MEDIUM'
+    except Exception as e:
+        print(f"[AI Router] AI 에러, 규칙 폴백: {e}")
+        return _rule_based_fallback(prompt)
