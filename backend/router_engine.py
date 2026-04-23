@@ -5,8 +5,8 @@ from security_engine import sanitize_prompt
 from ai_router import analyze_complexity_ai
 
 async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemini_key: str):
-    # 1. PII 마스킹 (사내 기밀 보호)
-    safe_prompt, is_masked = sanitize_prompt(prompt)
+    # 1. V4 가명 치환형 PII 마스킹 (사내 기밀 보호 + 답변 복원 지원)
+    safe_prompt, is_masked, alias_mapper = sanitize_prompt(prompt)
     if messages and messages[-1]['role'] == 'user':
         messages[-1]['content'] = safe_prompt
         
@@ -65,45 +65,45 @@ async def route_prompt_stream(prompt: str, messages: list, openai_key: str, gemi
         if gemini_key:
             try:
                 gen, model_used = get_gemini_generator(GEMINI_FLASH_MODELS)
-                return gen, cost_saved, model_used, is_masked
+                return gen, cost_saved, model_used, is_masked, alias_mapper
             except Exception as e:
                 print(f"[Fallback] Gemini 전체 실패. GPT-4o-mini로 우회합니다.")
                 if openai_key:
                     gen = get_openai_generator("gpt-4o-mini")
-                    return gen, 0.08, "gpt-4o-mini", is_masked
+                    return gen, 0.08, "gpt-4o-mini", is_masked, alias_mapper
                 else: raise Exception(f"EASY 라우팅 실패 - Gemini: [{e}] (OpenAI 키 없음)")
         elif openai_key:
             gen = get_openai_generator("gpt-4o-mini")
-            return gen, 0.08, "gpt-4o-mini", is_masked
+            return gen, 0.08, "gpt-4o-mini", is_masked, alias_mapper
             
     elif complexity == 'MEDIUM':
         cost_saved = 0.03
         if openai_key:
             try:
                 gen = get_openai_generator("gpt-4o")
-                return gen, cost_saved, "gpt-4o", is_masked
+                return gen, cost_saved, "gpt-4o", is_masked, alias_mapper
             except Exception as e:
                 if gemini_key:
                     gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
-                    return gen, 0.03, model_used, is_masked
+                    return gen, 0.03, model_used, is_masked, alias_mapper
                 else: raise Exception(f"MEDIUM 라우팅 실패 - OpenAI: [{e}] (Gemini 키 없음)")
         elif gemini_key:
             gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
-            return gen, 0.03, model_used, is_masked
+            return gen, 0.03, model_used, is_masked, alias_mapper
 
     else:
         cost_saved = 0.0
         if openai_key:
             try:
                 gen = get_openai_generator("o1-preview")
-                return gen, cost_saved, "o1-preview", is_masked
+                return gen, cost_saved, "o1-preview", is_masked, alias_mapper
             except Exception as e:
                 if gemini_key:
                     gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
-                    return gen, 0.0, model_used, is_masked
+                    return gen, 0.0, model_used, is_masked, alias_mapper
                 else: raise Exception(f"HARD 라우팅 실패 - OpenAI: [{e}] (Gemini 키 없음)")
         elif gemini_key:
             gen, model_used = get_gemini_generator(GEMINI_PRO_MODELS)
-            return gen, 0.0, model_used, is_masked
+            return gen, 0.0, model_used, is_masked, alias_mapper
 
     raise ValueError("API 키가 누락되었습니다.")

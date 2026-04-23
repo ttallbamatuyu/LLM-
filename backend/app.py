@@ -66,8 +66,8 @@ async def proxy_chat_completions(request: Request, background_tasks: BackgroundT
         raise HTTPException(status_code=401, detail="Missing API Keys in headers.")
 
     try:
-        # [V3 Feature 3 & 4] 스트리밍 Generator + 초기 연결 우회(Fallback)
-        gen, cost_saved, target_model, is_masked = await route_prompt_stream(
+        # [V4] 스트리밍 Generator + 초기 연결 우회(Fallback) + 가명 치환 복원
+        gen, cost_saved, target_model, is_masked, alias_mapper = await route_prompt_stream(
             prompt=last_user_message, 
             messages=messages,
             openai_key=openai_key,
@@ -81,15 +81,18 @@ async def proxy_chat_completions(request: Request, background_tasks: BackgroundT
                 "routed_to": target_model,
                 "estimated_cost_saved": cost_saved,
                 "is_masked": is_masked,
-                "cache_hit": False
+                "cache_hit": False,
+                "masked_count": alias_mapper.get_mapping_summary()["total_masked"] if is_masked else 0
             }
             yield f"data: {json.dumps({'meta_only': True, 'meta': meta})}\n\n"
             
             # 실시간으로 글자를 쪼개서 SSE 전송
             for chunk_text in gen:
                 if chunk_text:
-                    full_response_content += chunk_text
-                    yield f"data: {json.dumps({'content': chunk_text})}\n\n"
+                    # V4: 가명이 포함된 청크를 원본으로 복원하여 전송
+                    restored_chunk = alias_mapper.restore(chunk_text) if is_masked else chunk_text
+                    full_response_content += restored_chunk
+                    yield f"data: {json.dumps({'content': restored_chunk})}\n\n"
 
             # 스트리밍 완료 후 사용자 지연 없이 백그라운드로 로깅 및 캐시 적재
             background_tasks.add_task(

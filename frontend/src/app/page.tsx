@@ -321,7 +321,7 @@ export default function Dashboard() {
                               )}
                               {msg.meta.is_masked && (
                                   <span className="bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 px-2.5 py-1.5 rounded-md border border-rose-200 dark:border-rose-800/50 shadow-sm flex items-center">
-                                      <Shield className="w-3 h-3 mr-1"/> Data Masked
+                                      <Shield className="w-3 h-3 mr-1"/> {msg.meta.masked_count || ''} PII Anonymized
                                   </span>
                               )}
                           </div>
