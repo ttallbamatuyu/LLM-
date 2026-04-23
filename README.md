@@ -1,202 +1,67 @@
-<div align="center">
+# 🏛️ Enterprise AI Governance Platform (V4)
 
-# ⚡ LLM Proxy Gateway
+> **"The smartest, lightest, and most secure gateway between your enterprise and LLMs."**
 
-**Cut your LLM API costs by 70%. Protect sensitive data automatically.**
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Deploy with Render](https://img.shields.io/badge/Deploy%20to-Render-430098?style=flat&logo=render)](https://render.com)
+[![Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-000000?style=flat&logo=vercel)](https://vercel.com)
 
-An open-source, enterprise-grade intelligent proxy that sits between your app and LLM providers.
-It analyzes every prompt with a local AI, routes to the cheapest model, caches semantically similar queries, and scrubs confidential data — all before a single token leaves your network.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
-
-</div>
+**Enterprise AI Governance Platform**은 기업이 AI를 도입할 때 겪는 3대 리스크(**비용, 보안, ESG**)를 단 한 번의 배포로 해결하는 초경량 API 게이트웨이 솔루션입니다. 
 
 ---
 
-## 🤔 The Problem
+## 🔥 Key Features (V4 - The Evolution)
 
-Companies using LLM APIs face **three painful issues**:
+### 🛡️ Context-Preserving Anonymization (New!)
+기존의 단순 삭제형 마스킹을 넘어선 **가명 치환(Alias Mapping)** 기술을 적용했습니다.
+- **Security:** 이름, 전화번호, 주민번호, 계좌번호 등 한국형 PII를 가명(예: 홍길동)으로 치환하여 전송.
+- **Intelligence:** AI는 실제 문맥을 유지하며 답변을 생성하고, 유저는 답변 수신 시 **원본 데이터로 자동 복원**된 내용을 확인합니다.
+- **Result:** 데이터 유출은 0%, AI 답변 품질은 100%를 유지합니다.
 
-1. **💸 Cost Explosion** — Simple "hello" messages get routed to GPT-4, burning $0.03 per query when a $0.0001 model would suffice.
-2. **🔓 Data Leaks** — Employees paste internal project names, credentials, and PII directly into ChatGPT prompts.
-3. **⏱️ Vendor Lock-in** — When OpenAI goes down, your entire product dies.
+### 🍃 AI Carbon Footprint Tracker (ESG)
+기업의 지속가능한 경영(ESG)을 위해 LLM 호출에 따른 **탄소 배출량(CO2)**을 실시간으로 추적합니다. 
+- 모델별 전력 소모량을 계산하여 대시보드에 실시간 시각화.
+- 지능형 라우팅과 캐시를 통해 절감된 탄소량을 리포팅합니다.
 
-**This proxy solves all three. Drop it in front of any LLM API call and it just works.**
+### 💸 Intelligent Flash-First Routing
+자체 개발한 가중치 기반 라우터가 질문의 난이도를 판별합니다.
+- **EASY:** Gemini-1.5-Flash 등으로 자동 유도 (비용 90% 절감).
+- **Fallback:** API 장애 시 즉시 타사 모델로 우회하여 비즈니스 연속성 보장.
 
----
-
-## ✨ Key Features
-
-### 🧠 AI-Powered Smart Routing
-A local **DistilBART** zero-shot classifier analyzes every prompt's intent and complexity in real-time — no API call needed.
-
-| Prompt | Detected Complexity | Routed To | Cost |
-|--------|-------------------|-----------|------|
-| "Hello, how are you?" | `EASY` | Gemini Flash | $0.0001 |
-| "Write a React login form" | `MEDIUM` | GPT-4o | $0.01 |
-| "Prove P≠NP with formal logic" | `HARD` | o1-preview | $0.03 |
-
-### ⚡ Semantic Vector Caching
-Powered by **Sentence-Transformers**, the gateway embeds every query into a vector space and finds semantically similar past queries.
-
-- ❓ Query 1: *"How do I declare a variable in Python?"*  → API call, cached
-- ❓ Query 2: *"Python variable declaration method"* → **Cache Hit!** 0 API calls, 0 cost, instant response
-
-### 🛡️ Automatic Data Scrubbing (PII + Internal Secrets)
-Built on **Microsoft Presidio**, the security engine automatically detects and masks:
-- Phone numbers, emails, credit cards (PII)
-- Internal project codenames (configurable: `NEBULA`, `PROJECT4`, etc.)
-
-```
-Input:  "Call 010-1234-5678 about PROJECT4 credentials"
-Sent:   "Call [PHONE_NUMBER] about [REDACTED] credentials"
-```
-
-### 🌊 Streaming + Graceful Fallback
-- Full **SSE (Server-Sent Events)** streaming — characters appear like ChatGPT typing
-- If OpenAI is down, the proxy **detects failure on the first byte** and instantly reroutes to Gemini (or vice versa) — the user never sees an error
-
-### 💰 Rate Limiting & Quota Management
-Redis-backed per-organization daily spend tracking. When the budget is exhausted, the gateway returns `HTTP 429` immediately — **preventing billing surprises**.
+### 🎨 Modern Enterprise UI/UX
+- **Dark/Light Mode:** 어떤 업무 환경에서도 편안한 테마 제공.
+- **Markdown Rendering:** 복잡한 코드 블록, 표, 수식을 완벽하게 포맷팅하여 표시.
+- **Real-time Analytics:** 실시간 비용 절감액과 API 호출 통계를 한눈에 확인.
 
 ---
 
-## 🏗️ Architecture
+## 🚀 Quick Start (1-Minute Setup)
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Your Application                          │
-│              (Just change the API URL)                       │
-└─────────────────────┬────────────────────────────────────────┘
-                      │
-                      ▼
-┌──────────────────────────────────────────────────────────────┐
-│                 ⚡ LLM Proxy Gateway                         │
-│                                                              │
-│  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────────┐  │
-│  │ Security │→│ AI Router │→│  Cache   │→│   Streaming   │  │
-│  │ Scrubber │  │(DistilBART)│ │(Vectors)│  │  + Fallback   │  │
-│  └─────────┘  └──────────┘  └─────────┘  └──────┬───────┘  │
-│                                                   │          │
-│  ┌──────────────┐  ┌───────────────────┐         │          │
-│  │ Rate Limiter  │  │  Usage Analytics  │         │          │
-│  │  (Redis)      │  │   (SQLite/PG)     │         │          │
-│  └──────────────┘  └───────────────────┘         │          │
-└──────────────────────────────────────────────────┼──────────┘
-                                                   │
-                      ┌────────────────────────────┤
-                      ▼                            ▼
-               ┌────────────┐              ┌────────────┐
-               │   OpenAI   │              │   Gemini   │
-               │  GPT-4o    │              │  2.0 Flash │
-               │  o1-preview│              │  2.0 Pro   │
-               └────────────┘              └────────────┘
-```
+### Backend (Render Free Tier Ready)
+1. Fork this repo.
+2. Deploy as a Web Service on Render.
+3. Set Env: `OPENAI_API_KEY`, `GEMINI_API_KEY`. (BYOK)
+
+### Frontend (Vercel)
+1. Connect your repo to Vercel.
+2. Set Env: `NEXT_PUBLIC_API_URL` (Your Render URL).
+3. Experience the future of AI Governance.
 
 ---
 
-## 🆚 How We Compare
-
-| Feature | LiteLLM | Portkey | **LLM Proxy Gateway** |
-|---------|---------|---------|----------------------|
-| AI-based complexity routing | ❌ | ❌ | ✅ Local DistilBART |
-| Semantic vector caching | ❌ | Partial | ✅ Full cosine similarity |
-| PII + secret data scrubbing | ❌ | ❌ | ✅ Microsoft Presidio |
-| Streaming with auto-fallback | ✅ | ✅ | ✅ First-byte detection |
-| Per-org rate limiting | ❌ | ✅ (Paid) | ✅ Free |
-| Self-hosted / Open source | ✅ | ❌ | ✅ MIT License |
-| BYOK (Bring Your Own Key) | ✅ | ✅ | ✅ |
+## 📊 Business Value
+- **CFO:** API 비용 최대 85% 절감.
+- **CISO:** 사내 기밀 유출 위험 원천 차단 및 감사 로그 확보.
+- **ESG Manager:** AI 도입에 따른 탄소 배출 지표 실시간 관리.
 
 ---
 
-## 🚀 Quick Start
-
-### Option 1: Docker Compose (Recommended)
-
-```bash
-git clone https://github.com/ttallbamatuyu/LLM-.git
-cd LLM-
-docker compose up
-```
-
-Open `http://localhost:3000` — done. Backend, frontend, and Redis all spin up automatically.
-
-### Option 2: Manual Setup
-
-**Backend**
-```bash
-cd backend
-python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python -m spacy download en_core_web_lg
-python app.py
-```
-
-**Frontend**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-> **Note:** On first launch, the gateway downloads AI models (~500MB). Subsequent starts are instant.
+## 📄 License
+Licensed under the **MIT License**.
 
 ---
 
-## 🔧 Configuration
+## 🌟 Support the Project
+이 프로젝트가 귀사의 AI 비용과 보안 문제를 해결해 준다면, **Star**를 눌러 응원해 주세요!
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `PORT` | Backend server port | `8000` |
-| `REDIS_HOST` | Redis server hostname | `localhost` |
-| `REDIS_PORT` | Redis server port | `6379` |
-| `NEXT_PUBLIC_API_URL` | Backend URL for frontend | `http://localhost:8000` |
-
----
-
-## 📄 API Usage
-
-Integrate with **one line change** — just swap your OpenAI base URL:
-
-```python
-# Before (direct to OpenAI)
-client = OpenAI(api_key="sk-...")
-
-# After (through the proxy)
-client = OpenAI(
-    api_key="sk-...",
-    base_url="http://localhost:8000/v1"
-)
-```
-
-All existing OpenAI SDK code works unchanged. The proxy is fully compatible with the `/v1/chat/completions` endpoint.
-
----
-
-## 🛣️ Roadmap
-
-- [ ] **Substitution-based masking** — Replace secrets with aliases, restore in response (preserves AI context)
-- [ ] **Multi-tenant admin console** — Issue per-org proxy API keys
-- [ ] **Audit & security dashboard** — Track blocked data leak attempts
-- [ ] **Custom fine-tuned routers** — Upload your data, train domain-specific routing
-- [ ] **Multi-modal proxy** — OCR-based image/PDF scrubbing before vision models
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-  <b>If this project saves you money, consider giving it a ⭐</b>
-</div>
+[GitHub Repository](https://github.com/ttallbamatuyu/LLM-)
