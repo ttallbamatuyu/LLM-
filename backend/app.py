@@ -9,7 +9,13 @@ from cache_manager import get_semantic_cache, set_semantic_cache
 from rate_limiter import check_and_deduct_quota
 import json
 
-app = FastAPI(title="Intelligent LLM Proxy Gateway V3")
+app = FastAPI(
+    title="Enterprise AI Governance Platform",
+    description="엔터프라이즈 AI 보안 및 최적화 게이트웨이 V4. 실시간 가명 치환 및 지능형 모델 라우팅 제공.",
+    version="4.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 app.add_middleware(
     CORSMiddleware,
